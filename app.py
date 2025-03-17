@@ -63,6 +63,15 @@ df = df_filtered_category.copy()
 if selected_subcat != "All":
     df = df[df["Sub-Category"] == selected_subcat]
 
+# Enhancement: Filter Addition for Consumer Trends
+all_segments = sorted(df["Segment"].dropna().unique())
+selected_segment = st.sidebar.selectbox("Select Segment", options=["All"] + all_segments)
+
+# Final filter by Sub-Category
+df = df.copy()
+if selected_segment != "All":
+    df = df[df["Segment"] == selected_segment]
+
 # ---- Sidebar Date Range (From and To) ----
 if df.empty:
     # If there's no data after filters, default to overall min/max
@@ -207,6 +216,15 @@ else:
     product_grouped.sort_values(by=selected_kpi, ascending=False, inplace=True)
     top_10 = product_grouped.head(10)
 
+    # Group by 'Year' and 'Segment' for aggregation
+    df['Year'] = df['Order Date'].dt.year
+    year_segment_grouped = df.groupby(["Year", "Segment"]).agg({
+        "Sales": "sum",
+        "Profit": "sum",
+        "Quantity": "sum"
+    }).reset_index()
+    year_segment_grouped['Margin Rate']=year_segment_grouped['Profit'] / year_segment_grouped["Sales"].replace(0, 1)
+
     # Enhancement-1: Group by State for KPI mapping
     # Convert full state names to abbreviations
     df["State"] = df["State"].apply(lambda x: us.states.lookup(x).abbr if us.states.lookup(x) else x)
@@ -248,20 +266,36 @@ else:
 
     # Pivot table for visualization
     pivot_data = quarterly_data.pivot(index='Quarter', columns='Category', values=selected_kpi).fillna(0)
+    col_left, col_right = st.columns(2)
 
-    fig_map = px.choropleth(
-                state_grouped,
-                    locations="State",
-                    locationmode="USA-states",
-                    color=selected_kpi,
-                    hover_name="State",
-                    #title=f"State-wise {selected_kpi} Distribution",
-                    color_continuous_scale="Blues",
-                    template="plotly_white"
-                    )
-    fig_map.update_geos(scope="usa", showlakes=True, lakecolor="rgb(255, 255, 255)")
-    st.subheader(f"State-wise {selected_kpi} Distribution")
-    st.plotly_chart(fig_map, use_container_width=True)
+    with col_left:
+        fig_map = px.choropleth(
+                    state_grouped,
+                        locations="State",
+                        locationmode="USA-states",
+                        color=selected_kpi,
+                        hover_name="State",
+                        #title=f"State-wise {selected_kpi} Distribution",
+                        color_continuous_scale="Blues",
+                        template="plotly_white"
+                        )
+        fig_map.update_geos(scope="usa", showlakes=True, lakecolor="rgb(255, 255, 255)")
+        st.subheader(f"State-wise {selected_kpi} Distribution")
+        st.plotly_chart(fig_map, use_container_width=True)
+
+    with col_right:
+        # Create Stacked Bar Chart
+        fig = px.bar(
+            df,
+            x="Year",
+            y="Profit",
+            color="Segment",
+            labels={"Profit": "Total Profit", "Year": "Order Date"},
+            barmode="stack",
+        )
+        st.subheader(" Who are our Consumers? ")
+        # Display Chart in Streamlit
+        st.plotly_chart(fig)
 
     col_left, col_right = st.columns(2)
     with col_left:
@@ -294,7 +328,7 @@ else:
         ax1.legend()
         plt.xticks(rotation=45)
         plt.grid()
-        st.subheader(f"Quarterly {selected_kpi} Trend")
+        st.subheader(f"{selected_kpi} Over Time :Quarterly Trend")
         # Show plot in Streamlit
         st.pyplot(fig1)
 
@@ -337,3 +371,41 @@ else:
             yaxis={"categoryorder": "total ascending"}
         )
         st.plotly_chart(fig_bar, use_container_width=True)
+
+    
+
+    # Group by Category and Quarter-Year, then aggregate
+    df_grouped_new = df.groupby(["Category", "Quarter"]).agg(
+        {"Sales": "sum", 
+         "Profit": "sum",
+         "Quantity":"sum",}
+    ).reset_index()
+
+
+    if selected_kpi!="Profit":
+        # Streamlit UI
+        st.subheader(f"Profitable Category Year-over-Year (YoY) {selected_kpi} (Bar) & Profit(Line) Analysis ")
+        # Create Faceted Bar and Line Chart
+        fig = px.bar(df_grouped_new, 
+                    x="Quarter", 
+                    y=selected_kpi, 
+                    facet_row="Category",  # Creates separate rows per category
+                    color_discrete_sequence=["orange"]
+                    )
+
+        # Add Sales Line Chart per Category
+        for cat in df_grouped_new["Category"].unique():
+            subset = df_grouped_new[df_grouped_new["Category"] == cat]
+            fig.add_scatter(x=subset["Quarter"], 
+                            y=subset["Profit"], 
+                            mode="lines+markers", 
+                            name=f"Profit - {cat}", 
+                            line=dict(color="blue"), 
+                            row=list(df_grouped_new["Category"].unique()).index(cat) + 1, 
+                            col=1)
+
+        # Adjust Layout for Better Readability
+        fig.update_layout(height=600)
+
+        # Display Chart
+        st.plotly_chart(fig)
