@@ -1,7 +1,10 @@
+from matplotlib import pyplot as plt
 import streamlit as st
 import pandas as pd
 import plotly.express as px
 from datetime import datetime
+import us 
+
 
 # Set page config for wide layout
 st.set_page_config(page_title="SuperStore KPI Dashboard", layout="wide")
@@ -204,9 +207,63 @@ else:
     product_grouped.sort_values(by=selected_kpi, ascending=False, inplace=True)
     top_10 = product_grouped.head(10)
 
-    # ---- Side-by-Side Layout for Charts ----
-    col_left, col_right = st.columns(2)
+    # Enhancement-1: Group by State for KPI mapping
+    # Convert full state names to abbreviations
+    df["State"] = df["State"].apply(lambda x: us.states.lookup(x).abbr if us.states.lookup(x) else x)
+    #print(df["State"].unique()) 
+    state_grouped = df.groupby("State").agg({
+        "Sales": "sum",
+        "Quantity": "sum",
+        "Profit": "sum",
+    }).reset_index()
+    state_grouped["Margin Rate"] = state_grouped["Profit"] / state_grouped["Sales"].replace(0, 1)
+    #print(state_grouped)
 
+    # Enhancement-2: Convert Order Date to datetime and extract quarterly period as a string
+    # Convert Order Date to datetime and extract quarterly period as a string
+    df['Order Date'] = pd.to_datetime(df['Order Date'])
+    df['Quarter'] = df['Order Date'].dt.to_period('Q').astype(str)  # Convert Period to string
+
+    # Group by Quarter and calculate total Sales, Profit
+    quarterly_grouped = df.groupby("Quarter").agg({
+        "Sales": "sum",
+        "Profit": "sum",
+        "Quantity": "sum",
+    }).reset_index()
+
+    # Calculate Margin Rate safely
+    quarterly_grouped["Margin Rate"] = quarterly_grouped["Profit"] / quarterly_grouped["Sales"].replace(0, 1)
+    print(quarterly_grouped)
+
+    # Enhancement-3: category-wise sale trend
+    # Group by Quarter and Category to calculate Sales, Profit, and Margin Rate
+    quarterly_data = df.groupby(['Quarter', 'Category']).agg({
+        "Sales": "sum",
+        "Quantity": "sum",
+        "Profit": "sum"
+    }).reset_index()
+
+    # Compute Margin Rate
+    quarterly_data["Margin Rate"] = quarterly_data["Profit"] / quarterly_data["Sales"].replace(0, 1)
+
+    # Pivot table for visualization
+    pivot_data = quarterly_data.pivot(index='Quarter', columns='Category', values=selected_kpi).fillna(0)
+
+    fig_map = px.choropleth(
+                state_grouped,
+                    locations="State",
+                    locationmode="USA-states",
+                    color=selected_kpi,
+                    hover_name="State",
+                    #title=f"State-wise {selected_kpi} Distribution",
+                    color_continuous_scale="Blues",
+                    template="plotly_white"
+                    )
+    fig_map.update_geos(scope="usa", showlakes=True, lakecolor="rgb(255, 255, 255)")
+    st.subheader(f"State-wise {selected_kpi} Distribution")
+    st.plotly_chart(fig_map, use_container_width=True)
+
+    col_left, col_right = st.columns(2)
     with col_left:
         # Line Chart
         fig_line = px.line(
@@ -219,7 +276,49 @@ else:
         )
         fig_line.update_layout(height=400)
         st.plotly_chart(fig_line, use_container_width=True)
+    
+    # ---- Plot in Right Column ----
+    with col_right:
+        fig1, ax1 = plt.subplots(figsize=(12, 6))
 
+        # Aggregate KPI per quarter (sum across all categories)
+        quarterly_total = quarterly_grouped.groupby("Quarter")[selected_kpi].sum().reset_index()
+
+        # Plot total quarterly KPI trend
+        ax1.plot(quarterly_total["Quarter"], quarterly_total[selected_kpi], marker='o', linestyle='-', color='b', label="Total KPI")
+
+        # Formatting
+        ax1.set_xlabel("Quarter")
+        ax1.set_ylabel(f"Total {selected_kpi}")
+        ax1.set_title(f"{selected_kpi} Over Time :Quarterly Trend")
+        ax1.legend()
+        plt.xticks(rotation=45)
+        plt.grid()
+        st.subheader(f"Quarterly {selected_kpi} Trend")
+        # Show plot in Streamlit
+        st.pyplot(fig1)
+
+    # ---- Side-by-Side Layout for Charts ----
+    col_left, col_right = st.columns(2)
+    # Create a Choropleth Map for State-wise KPI Distribution
+    with col_left:
+        # Plot
+        fig, ax = plt.subplots(figsize=(12, 6))
+
+        for category in pivot_data.columns:
+            ax.plot(pivot_data.index, pivot_data[category], marker='o', label=category)
+
+        # Formatting
+        ax.set_xlabel("Quarter")
+        ax.set_ylabel(f"Total {selected_kpi}")
+        ax.set_title(f"Category {selected_kpi} Over Time")
+        ax.legend(title="Category")
+        plt.xticks(rotation=45)
+        plt.grid()
+        # Show plot in Streamlit
+        st.subheader(f"Category {selected_kpi} Over Time")
+        st.pyplot(fig) 
+    
     with col_right:
         # Horizontal Bar Chart
         fig_bar = px.bar(
