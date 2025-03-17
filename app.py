@@ -1,9 +1,11 @@
 from matplotlib import pyplot as plt
 import streamlit as st
 import pandas as pd
+import plotly.graph_objects as go
 import plotly.express as px
 from datetime import datetime
 import us 
+import numpy as np
 
 
 # Set page config for wide layout
@@ -387,28 +389,42 @@ else:
 
     if selected_kpi!="Profit":
         # Streamlit UI
-        st.subheader(f"Profitable Category Year-over-Year (YoY) {selected_kpi} (Bar) & Profit(Line) Analysis ")
-        # Create Faceted Bar and Line Chart
-        fig = px.bar(df_grouped_new, 
-                    x="Quarter", 
-                    y=selected_kpi, 
-                    facet_row="Category",  # Creates separate rows per category
-                    color_discrete_sequence=["orange"]
-                    )
+        st.subheader(f"Profitable Category : {selected_kpi} (Bar) Vs Profit(Line) Analysis ")
+        # Ensure Correct Category Order
+        category_order = sorted(df_grouped_new["Category"].unique())
 
-        # Add Sales Line Chart per Category
-        for cat in df_grouped_new["Category"].unique():
+        # Create Faceted Bar Chart
+        fig = px.bar(
+            df_grouped_new, 
+            x="Quarter", 
+            y=selected_kpi, 
+            facet_row="Category",  
+            color_discrete_sequence=["orange"],  
+            category_orders={"Category": category_order[::-1]},  # Ensuring correct order
+            opacity=0.7,
+            text_auto=True,
+            labels={selected_kpi: f"{selected_kpi} (Bar)"}
+        )
+
+        # Add Profit Line Chart per Category
+        for idx, cat in enumerate(category_order):
             subset = df_grouped_new[df_grouped_new["Category"] == cat]
-            fig.add_scatter(x=subset["Quarter"], 
-                            y=subset["Profit"], 
-                            mode="lines+markers", 
-                            name=f"Profit - {cat}", 
-                            line=dict(color="blue"), 
-                            row=list(df_grouped_new["Category"].unique()).index(cat) + 1, 
-                            col=1)
 
-        # Adjust Layout for Better Readability
-        fig.update_layout(height=600)
+            fig.add_trace(
+                go.Scatter(
+                    x=subset["Quarter"], 
+                    y=subset["Profit"], 
+                    mode="lines+markers", 
+                    name=f"Profit - {cat}",
+                    line=dict(color="blue"),
+                    hovertemplate="Quarter: %{x}<br>Profit: %{y}<extra></extra>"
+                ),
+                row=idx + 1, 
+                col=1
+            )
+
+        # Adjust Layout for Readability
+        fig.update_layout(height=600, showlegend=True)
 
         # Display Chart
         st.plotly_chart(fig)
