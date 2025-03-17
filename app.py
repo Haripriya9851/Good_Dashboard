@@ -305,7 +305,7 @@ else:
             labels={selected_kpi: selected_kpi, "Year": "Order Date"},
             barmode="stack",
         )
-        st.subheader(" Who are our Consumers : Consumer Trends ")
+        st.subheader(" Consumer Trends ")
         # Display Chart in Streamlit
         st.plotly_chart(fig)
 
