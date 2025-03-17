@@ -269,8 +269,17 @@ else:
 
     # Pivot table for visualization
     pivot_data = quarterly_data.pivot(index='Quarter', columns='Category', values=selected_kpi).fillna(0)
-    col_left, col_right = st.columns(2)
+    
+    df["Margin Rate"]= df["Profit"]/df["Sales"].replace(0, 1)
+    # Group by Category and Quarter-Year, then aggregate
+    df_grouped_new = df.groupby(["Category", "Quarter"]).agg(
+        {"Sales": "sum", 
+        "Profit": "sum",
+        "Quantity":"sum",
+        "Margin Rate":"sum"}
+    ).reset_index()
 
+    col_left, col_right = st.columns(2)
     with col_left:
         fig_map = px.choropleth(
                     state_grouped,
@@ -287,7 +296,6 @@ else:
         st.plotly_chart(fig_map, use_container_width=True)
 
     with col_right:
-        df["Margin Rate"]= df["Profit"]/df["Sales"].replace(0, 1)
         # Create Stacked Bar Chart
         fig = px.bar(
             df,
@@ -302,21 +310,8 @@ else:
         st.plotly_chart(fig)
 
     col_left, col_right = st.columns(2)
+     # ---- Plot in Left Column ----
     with col_left:
-        # Line Chart
-        fig_line = px.line(
-            daily_grouped,
-            x="Order Date",
-            y=selected_kpi,
-            title=f"{selected_kpi} Over Time",
-            labels={"Order Date": "Date", selected_kpi: selected_kpi},
-            template="plotly_white",
-        )
-        fig_line.update_layout(height=400)
-        st.plotly_chart(fig_line, use_container_width=True)
-    
-    # ---- Plot in Right Column ----
-    with col_right:
         fig1, ax1 = plt.subplots(figsize=(12, 6))
 
         # Aggregate KPI per quarter (sum across all categories)
@@ -336,10 +331,7 @@ else:
         # Show plot in Streamlit
         st.pyplot(fig1)
 
-    # ---- Side-by-Side Layout for Charts ----
-    col_left, col_right = st.columns(2)
-    # Create a Choropleth Map for State-wise KPI Distribution
-    with col_left:
+    with col_right:
         # Plot
         fig, ax = plt.subplots(figsize=(12, 6))
 
@@ -356,6 +348,53 @@ else:
         # Show plot in Streamlit
         st.subheader(f"Category {selected_kpi} Over Time")
         st.pyplot(fig) 
+   
+
+    # ---- Side-by-Side Layout for Charts ----
+    col_left, col_right = st.columns(2)
+    with col_left:
+        if selected_kpi!="Profit":
+            
+            # Streamlit UI
+            st.subheader(f"Profitable Category : {selected_kpi} (Bar) Vs Profit(Line) Analysis ")
+            # Ensure Correct Category Order
+            category_order = sorted(df_grouped_new["Category"].unique())
+
+            # Create Faceted Bar Chart
+            fig = px.bar(
+                df_grouped_new, 
+                x="Quarter", 
+                y=selected_kpi, 
+                facet_row="Category",  
+                color_discrete_sequence=["orange"],  
+                category_orders={"Category": category_order[::-1]},  # Ensuring correct order
+                opacity=0.7,
+                text_auto=True,
+                labels={selected_kpi: f"{selected_kpi} (Bar)"}
+            )
+
+            # Add Profit Line Chart per Category
+            for idx, cat in enumerate(category_order):
+                subset = df_grouped_new[df_grouped_new["Category"] == cat]
+
+                fig.add_trace(
+                    go.Scatter(
+                        x=subset["Quarter"], 
+                        y=subset["Profit"], 
+                        mode="lines+markers", 
+                        name=f"Profit - {cat}",
+                        line=dict(color="blue"),
+                        hovertemplate="Quarter: %{x}<br>Profit: %{y}<extra></extra>"
+                    ),
+                    row=idx + 1, 
+                    col=1
+                )
+
+            # Adjust Layout for Readability
+            fig.update_layout(height=600, showlegend=True)
+
+            # Display Chart
+            st.plotly_chart(fig)
     
     with col_right:
         # Horizontal Bar Chart
@@ -364,7 +403,7 @@ else:
             x=selected_kpi,
             y="Product Name",
             orientation="h",
-            title=f"Top 10 Products by {selected_kpi}",
+            #title=f"Top 10 Products by {selected_kpi}",
             labels={selected_kpi: selected_kpi, "Product Name": "Product"},
             color=selected_kpi,
             color_continuous_scale="Blues",
@@ -374,57 +413,9 @@ else:
             height=400,
             yaxis={"categoryorder": "total ascending"}
         )
+        st.subheader(f"Top 10 Products by {selected_kpi}")
         st.plotly_chart(fig_bar, use_container_width=True)
 
     
 
-    # Group by Category and Quarter-Year, then aggregate
-    df_grouped_new = df.groupby(["Category", "Quarter"]).agg(
-        {"Sales": "sum", 
-         "Profit": "sum",
-         "Quantity":"sum",
-         "Margin Rate":"sum"}
-    ).reset_index()
-
-
-    if selected_kpi!="Profit":
-        # Streamlit UI
-        st.subheader(f"Profitable Category : {selected_kpi} (Bar) Vs Profit(Line) Analysis ")
-        # Ensure Correct Category Order
-        category_order = sorted(df_grouped_new["Category"].unique())
-
-        # Create Faceted Bar Chart
-        fig = px.bar(
-            df_grouped_new, 
-            x="Quarter", 
-            y=selected_kpi, 
-            facet_row="Category",  
-            color_discrete_sequence=["orange"],  
-            category_orders={"Category": category_order[::-1]},  # Ensuring correct order
-            opacity=0.7,
-            text_auto=True,
-            labels={selected_kpi: f"{selected_kpi} (Bar)"}
-        )
-
-        # Add Profit Line Chart per Category
-        for idx, cat in enumerate(category_order):
-            subset = df_grouped_new[df_grouped_new["Category"] == cat]
-
-            fig.add_trace(
-                go.Scatter(
-                    x=subset["Quarter"], 
-                    y=subset["Profit"], 
-                    mode="lines+markers", 
-                    name=f"Profit - {cat}",
-                    line=dict(color="blue"),
-                    hovertemplate="Quarter: %{x}<br>Profit: %{y}<extra></extra>"
-                ),
-                row=idx + 1, 
-                col=1
-            )
-
-        # Adjust Layout for Readability
-        fig.update_layout(height=600, showlegend=True)
-
-        # Display Chart
-        st.plotly_chart(fig)
+    
