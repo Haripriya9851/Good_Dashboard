@@ -98,6 +98,7 @@ df = df[
     & (df["Order Date"] <= pd.to_datetime(to_date))
 ]
 
+
 # ---- Page Title ----
 st.title("SuperStore KPI Dashboard")
 
@@ -284,13 +285,14 @@ else:
         st.plotly_chart(fig_map, use_container_width=True)
 
     with col_right:
+        df["Margin Rate"]= df["Profit"]/df["Sales"].replace(0, 1)
         # Create Stacked Bar Chart
         fig = px.bar(
             df,
             x="Year",
-            y="Profit",
+            y=selected_kpi,
             color="Segment",
-            labels={"Profit": "Total Profit", "Year": "Order Date"},
+            labels={selected_kpi: selected_kpi, "Year": "Order Date"},
             barmode="stack",
         )
         st.subheader(" Who are our Consumers? ")
@@ -378,7 +380,8 @@ else:
     df_grouped_new = df.groupby(["Category", "Quarter"]).agg(
         {"Sales": "sum", 
          "Profit": "sum",
-         "Quantity":"sum",}
+         "Quantity":"sum",
+         "Margin Rate":"sum"}
     ).reset_index()
 
 
